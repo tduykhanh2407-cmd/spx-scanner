@@ -10,36 +10,46 @@
 
 <style>
 body{
-font-family:Arial,sans-serif;
-padding:20px;
-max-width:700px;
-margin:auto;
+    font-family: Arial, sans-serif;
+    padding:20px;
+    max-width:700px;
+    margin:auto;
 }
 
-button,
-input{
-width:100%;
-padding:15px;
-margin-top:10px;
-font-size:16px;
+h2{
+    text-align:center;
+}
+
+input,
+button{
+    width:100%;
+    padding:14px;
+    margin-top:10px;
+    font-size:16px;
+    box-sizing:border-box;
+}
+
+button{
+    cursor:pointer;
 }
 
 textarea{
-width:100%;
-height:300px;
-margin-top:10px;
-font-size:14px;
+    width:100%;
+    height:350px;
+    margin-top:10px;
+    font-size:14px;
+    box-sizing:border-box;
 }
 
 #status{
-margin-top:10px;
-font-weight:bold;
+    margin-top:10px;
+    font-weight:bold;
 }
 
 #count{
-margin-top:10px;
-font-size:18px;
-font-weight:bold;
+    margin-top:10px;
+    font-size:18px;
+    font-weight:bold;
 }
 </style>
 </head>
@@ -49,28 +59,28 @@ font-weight:bold;
 <h2>SPX Scanner</h2>
 
 <input
-type="file"
-id="images"
-multiple
-accept="image/*">
+    type="file"
+    id="images"
+    multiple
+    accept="image/*">
 
 <button onclick="scanImages()">
-Quét mã SPXVN
+    Quét mã SPXVN
 </button>
 
 <button onclick="copyAll()">
-Copy toàn bộ
+    Copy toàn bộ
 </button>
 
 <div id="status"></div>
 
 <div id="count">
-Tìm thấy: 0 mã
+    Tìm thấy: 0 mã
 </div>
 
 <textarea
-id="result"
-readonly></textarea>
+    id="result"
+    readonly></textarea>
 
 <script>
 
@@ -78,84 +88,99 @@ let codes = new Set();
 
 async function scanImages(){
 
-codes.clear();
+    codes.clear();
 
-const files =
-document.getElementById("images").files;
+    const files =
+        document.getElementById("images").files;
 
-if(files.length===0){
+    if(files.length === 0){
 
-alert("Vui lòng chọn ảnh");
+        alert("Vui lòng chọn ảnh");
 
-return;
-}
+        return;
+    }
 
-document.getElementById("result").value="";
+    document.getElementById("result").value = "";
 
-for(let i=0;i<files.length;i++){
+    document.getElementById("count").innerText =
+        "Tìm thấy: 0 mã";
 
-document.getElementById("status").innerText=
-`Đang quét ${i+1}/${files.length}`;
+    for(let i=0;i<files.length;i++){
 
-try{
+        document.getElementById("status").innerText =
+            `Đang quét ${i+1}/${files.length}`;
 
-const result=
-await Tesseract.recognize(
-files[i],
-'eng'
-);
+        try{
 
-let text=
-result.data.text
-.toUpperCase()
-.replace(/\s/g,'')
-.replace(/-/g,'')
-.replace(/O/g,'0');
+            const result =
+                await Tesseract.recognize(
+                    files[i],
+                    'eng'
+                );
 
-const matches=
-text.match(/SPXVN\d{10,15}/g);
+            let text =
+                result.data.text
+                    .toUpperCase()
+                    .replace(/\s+/g,'')
+                    .replace(/-/g,'')
+                    .replace(/O/g,'0')
+                    .replace(/I/g,'1')
+                    .replace(/L/g,'1');
 
-if(matches){
+            const matches =
+                text.match(/SPXVN\d{12}/g);
 
-matches.forEach(code=>{
+            if(matches){
 
-codes.add(code);
+                matches.forEach(code => {
 
-});
-}
+                    if(code.length === 17){
 
-}catch(e){
+                        codes.add(code);
 
-console.log(e);
-}
+                    }
 
-document.getElementById("count").innerText=
-`Tìm thấy: ${codes.size} mã`;
+                });
 
-}
+            }
 
-document.getElementById("result").value=
-Array.from(codes).join('\n');
+        }catch(error){
 
-document.getElementById("status").innerText=
-"Hoàn tất";
+            console.log(error);
+
+        }
+
+        document.getElementById("count").innerText =
+            `Tìm thấy: ${codes.size} mã`;
+    }
+
+    const resultList =
+        Array.from(codes).sort();
+
+    document.getElementById("result").value =
+        resultList.join('\n');
+
+    document.getElementById("status").innerText =
+        `Hoàn tất - ${codes.size} mã`;
+
 }
 
 function copyAll(){
 
-const text=
-document.getElementById("result").value;
+    const text =
+        document.getElementById("result").value;
 
-if(!text){
+    if(!text){
 
-alert("Chưa có mã");
+        alert("Chưa có mã");
 
-return;
-}
+        return;
+    }
 
-navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(text);
 
-alert("Đã copy toàn bộ mã");
+    alert(`Đã copy ${codes.size} mã`);
+
 }
 
 </script>
