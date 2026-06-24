@@ -1,104 +1,102 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SPX Scanner</title>
-<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-
-<style>
-body{
-font-family:Arial,sans-serif;
-padding:20px;
-max-width:700px;
-margin:auto;
-}
-
-h2{
-text-align:center;
-}
-
-input,
-button{
-width:100%;
-padding:14px;
-margin-top:10px;
-font-size:16px;
-box-sizing:border-box;
-}
-
-button{
-cursor:pointer;
-}
-
-textarea{
-width:100%;
-height:350px;
-margin-top:10px;
-font-size:14px;
-box-sizing:border-box;
-}
-
-#status{
-margin-top:10px;
-font-weight:bold;
-}
-
-#count{
-margin-top:10px;
-font-size:18px;
-font-weight:bold;
-}
-</style>
-</head>
-
-<body>
-
-<h2>SPX Scanner</h2>
-
-<input type="file" id="images" multiple accept="image/*">
-
-<button onclick="scanImages()">
-Quét mã SPXVN
-</button>
-
-<button onclick="copyAll()">
-Copy toàn bộ
-</button>
-
-<button onclick="clearAll()">
-Xóa dữ liệu
-</button>
-
-<div id="status"></div>
-
-<div id="count">
-Tìm thấy: 0 mã
-</div>
-
-<textarea id="result" readonly></textarea>
-
 <script>
 
 let codes = new Set();
+
+function preprocessImage(file){
+
+return new Promise((resolve)=>{
+
+const img = new Image();
+
+img.onload = ()=>{
+
+const canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = img.width;
+canvas.height = img.height;
+
+ctx.drawImage(img,0,0);
+
+const cropY = Math.floor(img.height * 0.20);
+const cropHeight = Math.floor(img.height * 0.30);
+
+const cropCanvas = document.createElement("canvas");
+const cropCtx = cropCanvas.getContext("2d");
+
+cropCanvas.width = img.width;
+cropCanvas.height = cropHeight;
+
+cropCtx.drawImage(
+canvas,
+0,
+cropY,
+img.width,
+cropHeight,
+0,
+0,
+img.width,
+cropHeight
+);
+
+const imageData =
+cropCtx.getImageData(
+0,
+0,
+cropCanvas.width,
+cropCanvas.height
+);
+
+const data = imageData.data;
+
+for(let i=0;i<data.length;i+=4){
+
+const avg =
+(data[i] +
+data[i+1] +
+data[i+2]) / 3;
+
+const value =
+avg > 180 ? 255 : 0;
+
+data[i] = value;
+data[i+1] = value;
+data[i+2] = value;
+
+}
+
+cropCtx.putImageData(
+imageData,
+0,
+0
+);
+
+resolve(cropCanvas);
+
+};
+
+img.src = URL.createObjectURL(file);
+
+});
+
+}
 
 async function scanImages(){
 
 codes.clear();
 
 document.getElementById("result").value = "";
-
-document.getElementById("count").innerText =
-"Tìm thấy: 0 mã";
+document.getElementById("count").innerText = "Tìm thấy: 0 mã";
 
 const files =
 document.getElementById("images").files;
 
-if(files.length === 0){
+if(files.length===0){
 
 alert("Vui lòng chọn ảnh");
 
 return;
+
 }
 
 for(let i=0;i<files.length;i++){
@@ -108,9 +106,12 @@ document.getElementById("status").innerText =
 
 try{
 
+const processed =
+await preprocessImage(files[i]);
+
 const result =
 await Tesseract.recognize(
-files[i],
+processed,
 'eng'
 );
 
@@ -120,19 +121,32 @@ result.data.text
 .replace(/\s+/g,'')
 .replace(/-/g,'')
 .replace(/O/g,'0')
+.replace(/Q/g,'0')
+.replace(/D/g,'0')
 .replace(/I/g,'1')
-.replace(/L/g,'1');
+.replace(/L/g,'1')
+.replace(/Z/g,'2')
+.replace(/S/g,'5')
+.replace(/B/g,'8');
+
+text = text.replace(/5PXVN/g,'SPXVN');
 
 const matches =
-text.match(/SPXVN\d{12}/g);
+text.match(/SPXVN[0-9]+/g);
 
 if(matches){
 
-matches.forEach(code => {
+matches.forEach(code=>{
 
-if(code.length === 17){
+let digits =
+code.substring(5);
 
-codes.add(code);
+if(digits.length >= 12){
+
+codes.add(
+'SPXVN' +
+digits.substring(0,12)
+);
 
 }
 
@@ -148,13 +162,13 @@ console.log(error);
 
 document.getElementById("count").innerText =
 `Tìm thấy: ${codes.size} mã`;
+
 }
 
-const resultList =
-Array.from(codes).sort();
-
 document.getElementById("result").value =
-resultList.join('\n');
+Array.from(codes)
+.sort()
+.join('\n');
 
 document.getElementById("status").innerText =
 `Hoàn tất - ${codes.size} mã`;
@@ -171,6 +185,7 @@ if(!text){
 alert("Chưa có mã");
 
 return;
+
 }
 
 navigator.clipboard.writeText(text);
@@ -184,19 +199,12 @@ function clearAll(){
 codes.clear();
 
 document.getElementById("images").value = "";
-
 document.getElementById("result").value = "";
-
 document.getElementById("status").innerText = "";
-
-document.getElementById("count").innerText =
-"Tìm thấy: 0 mã";
+document.getElementById("count").innerText = "Tìm thấy: 0 mã";
 
 alert("Đã xóa toàn bộ dữ liệu");
 
 }
 
 </script>
-
-</body>
-</html>
