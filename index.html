@@ -1,211 +1,294 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPX Scanner</title>
+
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    padding:20px;
+    max-width:700px;
+    margin:auto;
+}
+
+h2{
+    text-align:center;
+}
+
+input,
+button{
+    width:100%;
+    padding:14px;
+    margin-top:10px;
+    font-size:16px;
+    box-sizing:border-box;
+}
+
+button{
+    cursor:pointer;
+}
+
+textarea{
+    width:100%;
+    height:350px;
+    margin-top:10px;
+    font-size:14px;
+    box-sizing:border-box;
+}
+
+#status{
+    margin-top:10px;
+    font-weight:bold;
+}
+
+#count{
+    margin-top:10px;
+    font-size:18px;
+    font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<h2>SPX Scanner</h2>
+
+<input type="file" id="images" multiple accept="image/*">
+
+<button onclick="scanImages()">
+Quét mã SPXVN
+</button>
+
+<button onclick="copyAll()">
+Copy toàn bộ
+</button>
+
+<button onclick="clearAll()">
+Xóa dữ liệu
+</button>
+
+<div id="status"></div>
+
+<div id="count">
+Tìm thấy: 0 mã
+</div>
+
+<textarea id="result" readonly></textarea>
+
 <script>
 
 let codes = new Set();
 
 async function preprocessImage(file){
 
-return new Promise((resolve)=>{
+    return new Promise((resolve)=>{
 
-const img = new Image();
+        const img = new Image();
 
-img.onload = ()=>{
+        img.onload = ()=>{
 
-const cropY = Math.floor(img.height * 0.18);
-const cropHeight = Math.floor(img.height * 0.28);
+            const cropY = Math.floor(img.height * 0.18);
+            const cropHeight = Math.floor(img.height * 0.28);
 
-const canvas = document.createElement("canvas");
-const ctx = canvas.getContext("2d");
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
 
-canvas.width = img.width * 2;
-canvas.height = cropHeight * 2;
+            canvas.width = img.width * 2;
+            canvas.height = cropHeight * 2;
 
-ctx.drawImage(
-img,
-0,
-cropY,
-img.width,
-cropHeight,
-0,
-0,
-canvas.width,
-canvas.height
-);
+            ctx.drawImage(
+                img,
+                0,
+                cropY,
+                img.width,
+                cropHeight,
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
 
-const imageData =
-ctx.getImageData(
-0,
-0,
-canvas.width,
-canvas.height
-);
+            const imageData =
+                ctx.getImageData(
+                    0,
+                    0,
+                    canvas.width,
+                    canvas.height
+                );
 
-const data = imageData.data;
+            const data = imageData.data;
 
-for(let i=0;i<data.length;i+=4){
+            for(let i=0;i<data.length;i+=4){
 
-const gray =
-(data[i] +
-data[i+1] +
-data[i+2]) / 3;
+                const gray =
+                    (data[i] +
+                    data[i+1] +
+                    data[i+2]) / 3;
 
-const value =
-gray > 190 ? 255 : 0;
+                const value =
+                    gray > 190 ? 255 : 0;
 
-data[i] = value;
-data[i+1] = value;
-data[i+2] = value;
+                data[i] = value;
+                data[i+1] = value;
+                data[i+2] = value;
 
-}
+            }
 
-ctx.putImageData(imageData,0,0);
+            ctx.putImageData(imageData,0,0);
 
-resolve(canvas);
+            resolve(canvas);
 
-};
+        };
 
-img.src = URL.createObjectURL(file);
+        img.src = URL.createObjectURL(file);
 
-});
+    });
 
 }
 
 async function scanImages(){
 
-codes.clear();
+    codes.clear();
 
-document.getElementById("result").value = "";
-document.getElementById("count").innerText =
-"Tìm thấy: 0 mã";
+    document.getElementById("result").value = "";
 
-const files =
-document.getElementById("images").files;
+    document.getElementById("count").innerText =
+        "Tìm thấy: 0 mã";
 
-if(files.length===0){
+    const files =
+        document.getElementById("images").files;
 
-alert("Vui lòng chọn ảnh");
+    if(files.length === 0){
 
-return;
+        alert("Vui lòng chọn ảnh");
 
-}
+        return;
 
-for(let i=0;i<files.length;i++){
+    }
 
-document.getElementById("status").innerText =
-`Đang quét ${i+1}/${files.length}`;
+    for(let i=0;i<files.length;i++){
 
-try{
+        document.getElementById("status").innerText =
+            `Đang quét ${i+1}/${files.length}`;
 
-const processed =
-await preprocessImage(files[i]);
+        try{
 
-const result =
-await Tesseract.recognize(
-processed,
-'eng',
-{
-tessedit_char_whitelist:
-'SPXVN0123456789'
-}
-);
+            const processed =
+                await preprocessImage(files[i]);
 
-let text =
-result.data.text
-.toUpperCase()
-.replace(/\s+/g,'')
-.replace(/-/g,'')
-.replace(/O/g,'0')
-.replace(/Q/g,'0')
-.replace(/D/g,'0')
-.replace(/I/g,'1')
-.replace(/L/g,'1')
-.replace(/Z/g,'2')
-.replace(/S/g,'5')
-.replace(/B/g,'8');
+            const result =
+                await Tesseract.recognize(
+                    processed,
+                    'eng'
+                );
 
-text = text.replace(/5PXVN/g,'SPXVN');
-text = text.replace(/SPXVN/g,'SPXVN');
-text = text.replace(/SPXVNN/g,'SPXVN');
+            let text =
+                result.data.text
+                .toUpperCase()
+                .replace(/\s+/g,'')
+                .replace(/-/g,'')
+                .replace(/O/g,'0')
+                .replace(/Q/g,'0')
+                .replace(/D/g,'0')
+                .replace(/I/g,'1')
+                .replace(/L/g,'1')
+                .replace(/Z/g,'2')
+                .replace(/S/g,'5')
+                .replace(/B/g,'8');
 
-const matches =
-text.match(/SPXVN[0-9]+/g);
+            text = text.replace(/5PXVN/g,'SPXVN');
+            text = text.replace(/SPXVNN/g,'SPXVN');
 
-if(matches){
+            const matches =
+                text.match(/SPXVN[0-9]+/g);
 
-matches.forEach(code=>{
+            if(matches){
 
-const digits =
-code.substring(5);
+                matches.forEach(code=>{
 
-if(digits.length >= 12){
+                    const digits =
+                        code.substring(5);
 
-const finalCode =
-"SPXVN" +
-digits.substring(0,12);
+                    if(digits.length >= 12){
 
-if(/^SPXVN\d{12}$/.test(finalCode)){
+                        const finalCode =
+                            "SPXVN" +
+                            digits.substring(0,12);
 
-codes.add(finalCode);
+                        if(/^SPXVN\d{12}$/.test(finalCode)){
 
-}
+                            codes.add(finalCode);
 
-}
+                        }
 
-});
+                    }
 
-}
+                });
 
-}catch(error){
+            }
 
-console.log(error);
+        }catch(error){
 
-}
+            console.log(error);
 
-document.getElementById("count").innerText =
-`Tìm thấy: ${codes.size} mã`;
+        }
 
-}
+        document.getElementById("count").innerText =
+            `Tìm thấy: ${codes.size} mã`;
 
-document.getElementById("result").value =
-Array.from(codes)
-.sort()
-.join('\n');
+    }
 
-document.getElementById("status").innerText =
-`Hoàn tất - ${codes.size} mã`;
+    document.getElementById("result").value =
+        Array.from(codes)
+        .sort()
+        .join('\n');
+
+    document.getElementById("status").innerText =
+        `Hoàn tất - ${codes.size} mã`;
 
 }
 
 function copyAll(){
 
-const text =
-document.getElementById("result").value;
+    const text =
+        document.getElementById("result").value;
 
-if(!text){
+    if(!text){
 
-alert("Chưa có mã");
+        alert("Chưa có mã");
 
-return;
+        return;
 
-}
+    }
 
-navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(text);
 
-alert(`Đã copy ${codes.size} mã`);
+    alert(`Đã copy ${codes.size} mã`);
 
 }
 
 function clearAll(){
 
-codes.clear();
+    codes.clear();
 
-document.getElementById("images").value = "";
-document.getElementById("result").value = "";
-document.getElementById("status").innerText = "";
-document.getElementById("count").innerText =
-"Tìm thấy: 0 mã";
+    document.getElementById("images").value = "";
 
-alert("Đã xóa toàn bộ dữ liệu");
+    document.getElementById("result").value = "";
+
+    document.getElementById("status").innerText = "";
+
+    document.getElementById("count").innerText =
+        "Tìm thấy: 0 mã";
+
+    alert("Đã xóa toàn bộ dữ liệu");
 
 }
 
 </script>
+
+</body>
+</html>
