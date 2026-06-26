@@ -3,92 +3,71 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SPX Scanner - Fix Double Zero</title>
+<title>SPX Scanner</title>
 
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
 body{
-    font-family: Arial, sans-serif;
-    padding: 20px;
-    max-width: 700px;
-    margin: auto;
-    background-color: #f9f9f9;
+    font-family:Arial,sans-serif;
+    padding:20px;
+    max-width:700px;
+    margin:auto;
 }
 
 h2{
-    text-align: center;
-    color: #333;
+    text-align:center;
 }
 
-input, button{
-    width: 100%;
-    padding: 14px;
-    margin-top: 10px;
-    font-size: 16px;
-    box-sizing: border-box;
-    border-radius: 6px;
+input,button{
+    width:100%;
+    padding:14px;
+    margin-top:10px;
+    font-size:16px;
+    box-sizing:border-box;
+    /* Khôi phục thiết kế giao diện bo góc nhẹ giống như ảnh mẫu của bạn */
     border: 1px solid #ccc;
+    border-radius: 8px;
 }
 
 button {
-    background-color: #007bff;
-    color: white;
-    font-weight: bold;
-    cursor: pointer;
+    background-color: #e5e5e5;
+    color: #000;
     border: none;
-    transition: background 0.2s;
+    cursor: pointer;
 }
 
-button:hover {
-    background-color: #0056b3;
-}
-
-button.secondary {
-    background-color: #6c757d;
-}
-button.secondary:hover {
-    background-color: #5a6268;
-}
-
-button.danger {
-    background-color: #dc3545;
-}
-button.danger:hover {
-    background-color: #bd2130;
+button:active {
+    background-color: #d8d8d8;
 }
 
 textarea{
-    width: 100%;
-    height: 350px;
-    margin-top: 10px;
-    font-size: 16px;
-    box-sizing: border-box;
+    width:100%;
+    height:350px;
+    margin-top:10px;
+    font-size:14px;
+    box-sizing:border-box;
     padding: 10px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    font-family: monospace;
+    border: 1px solid #eee;
+    border-radius: 8px;
 }
 
 #status{
-    margin-top: 15px;
-    font-weight: bold;
-    color: #007bff;
-    text-align: center;
+    margin-top:10px;
+    font-weight:bold;
 }
 
 #count{
-    margin-top: 10px;
-    font-size: 18px;
-    font-weight: bold;
-    color: #28a745;
+    margin-top:10px;
+    font-size:18px;
+    font-weight:bold;
 }
 </style>
 </head>
 
 <body>
 
-<h2>SPX Scanner (Sửa lỗi trùng số 0)</h2>
+<h2>SPX Scanner</h2>
 
 <input type="file" id="images" multiple accept="image/*">
 
@@ -96,11 +75,11 @@ textarea{
 Quét mã SPXVN
 </button>
 
-<button class="secondary" onclick="copyAll()">
+<button onclick="copyAll()">
 Copy toàn bộ
 </button>
 
-<button class="danger" onclick="clearAll()">
+<button onclick="clearAll()">
 Xóa dữ liệu
 </button>
 
@@ -108,12 +87,12 @@ Xóa dữ liệu
 
 <div id="count">Tìm thấy: 0 mã</div>
 
-<textarea id="result" readonly placeholder="Kết quả mã SPXVN sẽ hiển thị ở đây..."></textarea>
+<textarea id="result" readonly></textarea>
 
 <script>
 let codes = new Set();
 
-// Hàm xử lý ảnh nhị phân
+// Hàm xử lý ảnh nhị phân tăng độ nét chữ
 async function preprocessImage(file){
     return new Promise((resolve)=>{
         const img = new Image();
@@ -152,13 +131,14 @@ async function scanImages(){
 
     document.getElementById("status").innerText = "Đang khởi tạo bộ quét...";
 
+    // Tạo Worker bên ngoài vòng lặp giúp tăng tốc độ xử lý hàng loạt ảnh
     const worker = await Tesseract.createWorker('eng');
     await worker.setParameters({
         tesseract_char_whitelist: '0123456789SPXVNspxvnABCabc', 
     });
 
     for(let i = 0; i < files.length; i++){
-        document.getElementById("status").innerText = `Đang quét ảnh ${i+1}/${files.length}`;
+        document.getElementById("status").innerText = `Đang quét ${i+1}/${files.length}`;
 
         try{
             const processed = await preprocessImage(files[i]);
@@ -166,7 +146,7 @@ async function scanImages(){
 
             let text = result.data.text.toUpperCase().replace(/\s+/g,'').replace(/-/g,'');
 
-            // Bộ quy đổi sửa lỗi ký tự tương đồng toàn diện
+            // Bộ quy đổi sửa nhanh các ký tự nhận diện lỗi phổ biến
             text = text
                 .replace(/O/g,'0')
                 .replace(/Q/g,'0')
@@ -178,32 +158,31 @@ async function scanImages(){
                 .replace(/T/g,'7')
                 .replace(/S/g,'5');
 
-            // Sửa lại tiền tố nếu vô tình bị đổi chữ S sang số 5
+            // Khôi phục lại tiền tố chính xác
             text = text.replace(/5PXVN/g,'SPXVN');
 
-            // TÌM KIẾM THÔNG MINH: Quét cụm SPXVN + toàn bộ ký tự số/chữ nối liền (không giới hạn độ dài ở đây)
+            // Gom trọn cụm chữ kèm dãy ký tự liên tục phía sau để bóc tách thông minh
             const matches = text.match(/SPXVN[0-9ABC]+/g);
 
             if(matches){
                 matches.forEach(rawCode => {
-                    let digits = rawCode.substring(5); // Cắt lấy phần lõi phía sau chữ SPXVN
+                    let digits = rawCode.substring(5);
 
-                    // ĐẶC TRỊ LỖI TRÙNG SỐ 0: Nếu phần đuôi dài hơn quy định và bắt đầu bằng "00"
-                    // (Tất cả mã SPX thực tế luôn bắt đầu bằng một số 0 đơn lẻ như 06..., không có mã nào bắt đầu bằng 00...)
+                    // ĐẶC TRỊ SỬA LỖI TRÙNG SỐ 0: Nếu dải ký tự dư độ dài và bị lặp "00..." ở đầu
                     if (digits.length > 12 && digits.startsWith("00")) {
-                        digits = digits.substring(1); // Xóa bớt một số 0 bị thừa ở đầu đi
+                        digits = digits.substring(1); // Cắt bỏ bớt một chữ số 0 bị đọc thừa
                     }
 
-                    // Tiến hành cắt lấy chuẩn độ dài 12 ký tự sau khi đã sửa lỗi thừa số 0
+                    // Tiến hành cắt lấy chuẩn 12 ký tự sau khi xử lý lỗi trùng số 0
                     if (digits.length >= 12) {
                         let finalDigits = digits.substring(0, 12);
                         
-                        // Sửa lỗi nếu Tesseract nhận diện nhầm số 8 ở giữa chuỗi thành chữ B
+                        // Sửa lỗi nếu số 8 ở giữa chuỗi bị nhận diện nhầm thành chữ B
                         let body = finalDigits.substring(0, 11).replace(/B/g, '8');
-                        let tail = finalDigits.substring(11, 12); // Ký tự cuối cùng (có thể là số hoặc A/B/C)
+                        let tail = finalDigits.substring(11, 12); // Ký tự cuối cùng
                         let checkedCode = "SPXVN" + body + tail;
 
-                        // Kiểm tra định dạng chuẩn cuối cùng: 12 số HOẶC 11 số + A/B/C
+                        // Chấp nhận cả 2 định dạng: 12 số HOẶC 11 số + chữ A/B/C ở đuôi
                         if (/^SPXVN\d{12}$/.test(checkedCode) || /^SPXVN\d{11}[ABC]$/.test(checkedCode)) {
                             codes.add(checkedCode);
                         }
@@ -212,7 +191,7 @@ async function scanImages(){
             }
 
         } catch(error){
-            console.error("Lỗi ảnh số " + (i+1) + ":", error);
+            console.log(error);
         }
 
         document.getElementById("count").innerText = `Tìm thấy: ${codes.size} mã`;
@@ -221,17 +200,17 @@ async function scanImages(){
     await worker.terminate();
 
     document.getElementById("result").value = Array.from(codes).sort().join('\n');
-    document.getElementById("status").innerText = `Hoàn tất - Đã quét xong ${files.length} ảnh`;
+    document.getElementById("status").innerText = `Hoàn tất - ${codes.size} mã`;
 }
 
 function copyAll(){
     const text = document.getElementById("result").value;
     if(!text){
-        alert("Chưa có dữ liệu");
+        alert("Chưa có mã");
         return;
     }
     navigator.clipboard.writeText(text);
-    alert(`Đã copy thành công ${codes.size} mã!`);
+    alert(`Đã copy ${codes.size} mã`);
 }
 
 function clearAll(){
@@ -240,7 +219,7 @@ function clearAll(){
     document.getElementById("result").value = "";
     document.getElementById("status").innerText = "";
     document.getElementById("count").innerText = "Tìm thấy: 0 mã";
-    alert("Đã xóa sạch dữ liệu.");
+    alert("Đã xóa toàn bộ dữ liệu");
 }
 </script>
 
