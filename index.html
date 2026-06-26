@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SPX Scanner - Full Formats</title>
+<title>SPX Scanner - Fix Double Zero</title>
 
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 
@@ -88,7 +88,7 @@ textarea{
 
 <body>
 
-<h2>SPX Scanner (Hỗ trợ đuôi A/B/C)</h2>
+<h2>SPX Scanner (Sửa lỗi trùng số 0)</h2>
 
 <input type="file" id="images" multiple accept="image/*">
 
@@ -113,7 +113,7 @@ Xóa dữ liệu
 <script>
 let codes = new Set();
 
-// Hàm xử lý ảnh chuyên sâu
+// Hàm xử lý ảnh nhị phân
 async function preprocessImage(file){
     return new Promise((resolve)=>{
         const img = new Image();
@@ -129,7 +129,7 @@ async function preprocessImage(file){
             const data = imgData.data;
             for (let i = 0; i < data.length; i += 4) {
                 const brightness = 0.34 * data[i] + 0.5 * data[i + 1] + 0.16 * data[i + 2];
-                const color = brightness > 140 ? 255 : 0; // Tăng nhẹ ngưỡng để chữ đen rõ hơn
+                const color = brightness > 140 ? 255 : 0; 
                 data[i] = data[i+1] = data[i+2] = color;
             }
             ctx.putImageData(imgData, 0, 0);
@@ -153,8 +153,6 @@ async function scanImages(){
     document.getElementById("status").innerText = "Đang khởi tạo bộ quét...";
 
     const worker = await Tesseract.createWorker('eng');
-    
-    // CẬP NHẬT WHITELIST: Thêm ABCabc để cho phép nhận diện ký tự đuôi này
     await worker.setParameters({
         tesseract_char_whitelist: '0123456789SPXVNspxvnABCabc', 
     });
@@ -168,9 +166,7 @@ async function scanImages(){
 
             let text = result.data.text.toUpperCase().replace(/\s+/g,'').replace(/-/g,'');
 
-            // Bước sửa lỗi nhận diện sai chữ số (Tránh sửa chữ A, B, C ở cuối)
-            // Ta tạm thời xử lý các chữ hay nhầm lẫn sang số ngoại trừ vị trí đuôi mã nếu có thể,
-            // hoặc dùng Regex quét thông minh:
+            // Bộ quy đổi sửa lỗi ký tự tương đồng toàn diện
             text = text
                 .replace(/O/g,'0')
                 .replace(/Q/g,'0')
@@ -180,32 +176,36 @@ async function scanImages(){
                 .replace(/Z/g,'2')
                 .replace(/G/g,'6')
                 .replace(/T/g,'7')
-                .replace(/S/g,'5'); // Chữ S đổi thành 5, sửa tiền tố sau
+                .replace(/S/g,'5');
 
-            // Sửa lại phần tiền tố nếu bị nhận nhầm
+            // Sửa lại tiền tố nếu vô tình bị đổi chữ S sang số 5
             text = text.replace(/5PXVN/g,'SPXVN');
 
-            // REGEX MỚI: Tìm "SPXVN" + đuôi gồm 12 ký tự (có thể là số hoặc chữ A, B, C)
-            // Nhờ whitelist chặn từ đầu nên đuôi này chỉ có thể là cụm số hoặc số kết thúc bằng A/B/C
-            const matches = text.match(/SPXVN[0-9ABC]{12}/g);
+            // TÌM KIẾM THÔNG MINH: Quét cụm SPXVN + toàn bộ ký tự số/chữ nối liền (không giới hạn độ dài ở đây)
+            const matches = text.match(/SPXVN[0-9ABC]+/g);
 
             if(matches){
-                matches.forEach(code => {
-                    // Biến đổi chữ B lỡ nhận nhầm từ số 8 (chỉ áp dụng nếu chữ B đứng ở giữa dãy số)
-                    // Quy tắc kiểm tra cấu trúc chính xác bằng biểu thức chính quy (Regex)
-                    // Hợp lệ khi: SPXVN + 12 chữ số HOẶC SPXVN + 11 chữ số + [A hoặc B hoặc C]
-                    if (/^SPXVN\d{12}$/.test(code) || /^SPXVN\d{11}[ABC]$/.test(code)) {
-                        codes.add(code);
-                    } else {
-                        // Trường hợp đặc biệt: Nếu Tesseract đọc nhầm số 8 ở giữa thành chữ B 
-                        // Ví dụ: SPXVN068739B74256 -> chuyển lại chữ B thành số 8
-                        let prefix = code.substring(0, 5);
-                        let body = code.substring(5, 16).replace(/B/g, '8').replace(/A/g, '4').replace(/C/g, '0');
-                        let tail = code.substring(16, 17); // Ký tự thứ 12 cuối cùng
+                matches.forEach(rawCode => {
+                    let digits = rawCode.substring(5); // Cắt lấy phần lõi phía sau chữ SPXVN
+
+                    // ĐẶC TRỊ LỖI TRÙNG SỐ 0: Nếu phần đuôi dài hơn quy định và bắt đầu bằng "00"
+                    // (Tất cả mã SPX thực tế luôn bắt đầu bằng một số 0 đơn lẻ như 06..., không có mã nào bắt đầu bằng 00...)
+                    if (digits.length > 12 && digits.startsWith("00")) {
+                        digits = digits.substring(1); // Xóa bớt một số 0 bị thừa ở đầu đi
+                    }
+
+                    // Tiến hành cắt lấy chuẩn độ dài 12 ký tự sau khi đã sửa lỗi thừa số 0
+                    if (digits.length >= 12) {
+                        let finalDigits = digits.substring(0, 12);
                         
-                        let fixedCode = prefix + body + tail;
-                        if (/^SPXVN\d{12}$/.test(fixedCode) || /^SPXVN\d{11}[ABC]$/.test(fixedCode)) {
-                            codes.add(fixedCode);
+                        // Sửa lỗi nếu Tesseract nhận diện nhầm số 8 ở giữa chuỗi thành chữ B
+                        let body = finalDigits.substring(0, 11).replace(/B/g, '8');
+                        let tail = finalDigits.substring(11, 12); // Ký tự cuối cùng (có thể là số hoặc A/B/C)
+                        let checkedCode = "SPXVN" + body + tail;
+
+                        // Kiểm tra định dạng chuẩn cuối cùng: 12 số HOẶC 11 số + A/B/C
+                        if (/^SPXVN\d{12}$/.test(checkedCode) || /^SPXVN\d{11}[ABC]$/.test(checkedCode)) {
+                            codes.add(checkedCode);
                         }
                     }
                 });
